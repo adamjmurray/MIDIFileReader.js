@@ -1,0 +1,12 @@
+fs = require 'fs'
+
+DEBUG = process.env.DEBUG
+
+filepath = process.argv[2]
+throw 'MIDI input file path is required' unless filepath
+
+midi = new MIDIFileReader filepath
+midi.read ->
+  console.log "MIDI format type: #{midi.formatType}"
+  console.log "Number of tracks: #{midi.numTracks}"
+  console.log "Time division: #{midi.timeDiv}"
