@@ -70,7 +70,7 @@ task 'test', 'run the unit tests', ->
 task 'release', 'build the app (release version, minified)', ->
   exec 'coffee', COFFEE_ARGS, suppressStatus:true, ->
     exec 'uglifyjs', ['-nmf', '--overwrite', OUT_FILE], {}, ->
-      console.log '\nDone building the release vesion.\n' +
+      console.log '\nDone building the release vesion.\n'
 
 
 task 'dist', 'package the app for distribution', ->
