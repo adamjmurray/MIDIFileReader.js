@@ -49,7 +49,7 @@ class MIDIFileReader
       @byteOffset = 0
       @tracks = []
       @_readHeader()
-      @_readTrack(trackIndex) for trackIndex in [0...@numTracks] by 1
+      @_readTrack(trackNumber) for trackNumber in [1..@numTracks] by 1
       callback() if callback
       return
 
@@ -63,10 +63,10 @@ class MIDIFileReader
     return
 
 
-  _readTrack: (trackIndex) ->
+  _readTrack: (trackNumber) ->
     throw 'Invalid track chunk ID' unless @_read4() is TRACK_CHUNK_ID
 
-    @track = {number: trackIndex+1}
+    @track = {number: trackNumber}
     @track.events = @events = []
     @notes = {}
     @timeOffset = 0
