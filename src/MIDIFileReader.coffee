@@ -36,7 +36,29 @@ class MIDIFileReader
     throw 'Invalid track chunk ID' unless @_read4() is TRACK_CHUNK_ID
     trackNumBytes = @_read4()
     console.log "Track has #{trackNumBytes} bytes" if DEBUG
-    @_read1() for _ in [0...trackNumBytes] by 1
+    endOffset = @offset + trackNumBytes
+    while @offset < endOffset
+      deltaTime = @_readVarLen()
+      console.log "Delta time: #{deltaTime}"
+      type = @_read1()
+
+      if type == 0xFF # meta event
+        type = @_read1()
+        data = @_readVarLen() # TODO: this is not the right thing to do for many event types
+        console.log "Meta Event: type #{type.toString(16)}, data: #{data}"
+
+      else if type == 0xF0 or type == 0xF7 #sysex
+        data = @_readVarLen()
+        console.log "Sysex Event: #{data}"
+        # TODO: handle divided events, etc
+
+      else
+        channel = (type & 0x0F)
+        type = (type & 0xF0)
+        param1 = @_read1()
+        param2 = @_read1()
+        console.log "Channel event: type #{type.toString(16)}, channel #{channel}, #{param1} #{param2}"
+
     return
 
 
@@ -44,7 +66,7 @@ class MIDIFileReader
   _read4: ->
     data = @buffer.readUInt32BE(@offset)
     @offset += 4
-    console.log '>',data if DEBUG
+    console.log '>',data.toString(16) if DEBUG
     data
 
 
@@ -52,12 +74,22 @@ class MIDIFileReader
   _read2: ->
     data = @buffer.readUInt16BE(@offset)
     @offset += 2
-    console.log '>',data if DEBUG
+    console.log '>',data.toString(16) if DEBUG
     data
 
 
   _read1: ->
     data = @buffer.readUInt8(@offset)
     @offset += 1
-    console.log '>',data if DEBUG
+    console.log '>',data.toString(16) if DEBUG
     data
+
+
+  # read a variable length chunk of bytes
+  _readVarLen: ->
+    data = 0
+    byte = @_read1()
+    while (byte & 0x80) != 0
+      data = (data << 7) + (byte & 0x7F)
+      byte = @_read1()
+    (data << 7) + (byte & 0x7F)
