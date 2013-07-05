@@ -1,0 +1,9 @@
+{
+  "name": "midi-file-reader",
+  "version": "0.1",
+  "dependencies": {
+    "jasmine-node": "~1.10.1",
+    "uglify-js": "~2.3.6",
+    "colors": "~0.6.0"
+  }
+}
