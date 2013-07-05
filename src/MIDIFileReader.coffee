@@ -34,7 +34,7 @@ class MIDIFileReader
       @byteOffset = 0
       @tracks = []
       @_readHeader()
-      @_readTrack() for _ in [0...@numTracks] by 1
+      @_readTrack(trackIndex) for trackIndex in [0...@numTracks] by 1
       callback() if callback
       return
 
@@ -48,24 +48,30 @@ class MIDIFileReader
     return
 
 
-  _readTrack: ->
+  _readTrack: (trackIndex) ->
     throw 'Invalid track chunk ID' unless @_read4() is TRACK_CHUNK_ID
+
+    @track = {number: trackIndex+1}
+    @track.events = @events = []
+    @notes = {}
+    @timeOffset = 0
+
     trackNumBytes = @_read4()
+    endByte = @byteOffset + trackNumBytes
     console.log '------- TRACK --------' if DEBUG
     console.log "Track has #{trackNumBytes} bytes" if DEBUG
-    endByte = @byteOffset + trackNumBytes
-    @track = {}
-    @track.events = @events = []
-    @timeOffset = 0
+
     while @byteOffset < endByte
       deltaTime = @_readVarLen() # in ticks
       console.log "Delta time: #{deltaTime}" if DEBUG
       @timeOffset += deltaTime
       eventChunkType = @_read1()
+
       switch eventChunkType
         when EVENT_TYPE_META then @_readMetaEvent()
         when EVENT_TYPE_SYSEX_NORMAL, EVENT_TYPE_SYSEX_SPECIAL then @_readSysExEvent(eventChunkType)
         else @_readChannelEvent((eventChunkType & UPPER_4_BITS), (eventChunkType & LOWER_4_BITS))
+
     @tracks.push @track
     return
 
@@ -93,19 +99,40 @@ class MIDIFileReader
   _readChannelEvent: (typeMask, channel) ->
     param1 = @_read1()
     param2 = @_read1() unless typeMask == PROGRAM_CHANGE or typeMask == CHANNEL_AFTERTOUCH
-    typeName = switch typeMask
-      when NOTE_OFF then 'note off'
-      when NOTE_ON then 'note on'
-      when NOTE_AFTERTOUCH then 'note aftertouch'
-      when CONTROLLER then 'controller'
-      when PROGRAM_CHANGE then 'program change'
-      when CHANNEL_AFTERTOUCH then 'channel aftertouch'
-      when PITCH_BEND then 'pitch bend'
-      else 'unknown'
+
+    if typeMask == NOTE_ON
+      if @notes[param1]
+        console.log "Warning: ignoring overlapping note on for pitch #{param1}" # TODO, support this case?
+      @notes[param1] = [param2,@_currentTime()] # param1 is the pitch, param2 is velocity
+      return # we'll create a 'note' event when we see the corresponding note_off
+
+    if typeMask == NOTE_OFF
+      if @notes[param1]
+        param3 = param2 # the off velocity, if any
+        [param2,startTime] = @notes[param1] # the on velocity
+        delete @notes[param1]
+        duration = @_currentTime() - startTime
+      else
+        console.log "Warning: ignoring note off event for pitch #{param1} because there was no corresponding note on event"
+        return
 
     console.log "Channel event: type #{typeName}, channel #{channel}, #{param1} #{param2}" if DEBUG
-    event = {time: @_currentTime(), type: typeName, channel: channel, param1: param1}
-    event.param2 = param2 if param2
+
+    event = switch typeMask
+      when NOTE_OFF
+        e = {type:'note', pitch:param1, velocity:param2, duration:duration}
+        e['off-velocity'] = param3 if param3
+        e
+      when NOTE_AFTERTOUCH then {type:'note aftertouch', pitch:param1, value:param2}
+      when CONTROLLER then {type:'controller', number:param1, value:param2}
+      when PROGRAM_CHANGE then {type:'program change', number:param1}
+      when CHANNEL_AFTERTOUCH then {type:'channel aftertouch', value:param1}
+      when PITCH_BEND then {type:'pitch bend', value:(param1<<7)+param2}
+      else console.log "Warning: ignoring unknown event type #{typeMask.toString(16)}"
+
+    event.time = @_currentTime()
+    event.channel = channel
+
     @events.push event
     return
 
