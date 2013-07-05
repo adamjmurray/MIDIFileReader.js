@@ -22,6 +22,7 @@ class MIDIFileReader
   CHANNEL_AFTERTOUCH = 0xD0
   PITCH_BEND = 0xE0
 
+
   constructor: (@filepath) ->
 
 
@@ -92,8 +93,18 @@ class MIDIFileReader
   _readChannelEvent: (typeMask, channel) ->
     param1 = @_read1()
     param2 = @_read1() unless typeMask == PROGRAM_CHANGE or typeMask == CHANNEL_AFTERTOUCH
-    console.log "Channel event: type #{typeMask.toString(16)}, channel #{channel}, #{param1} #{param2}" if DEBUG
-    event = {time: @_currentTime(), type: "channel:#{typeMask.toString(16)}", channel: channel, param1: param1}
+    typeName = switch typeMask
+      when NOTE_OFF then 'note off'
+      when NOTE_ON then 'note on'
+      when NOTE_AFTERTOUCH then 'note aftertouch'
+      when CONTROLLER then 'controller'
+      when PROGRAM_CHANGE then 'program change'
+      when CHANNEL_AFTERTOUCH then 'channel aftertouch'
+      when PITCH_BEND then 'pitch bend'
+      else 'unknown'
+
+    console.log "Channel event: type #{typeName}, channel #{channel}, #{param1} #{param2}" if DEBUG
+    event = {time: @_currentTime(), type: typeName, channel: channel, param1: param1}
     event.param2 = param2 if param2
     @events.push event
     return
