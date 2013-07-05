@@ -55,8 +55,8 @@ class MIDIFileReader
 
 
   _readHeader: ->
-    throw 'Not a valid MIDI file: missing header chuck ID' unless @_read4() is HEADER_CHUNK_ID
-    throw 'Not a valid MIDI file: missing header chuck size' unless @_read4() is HEADER_CHUNK_SIZE
+    throw 'Invalid MIDI file: Missing header chuck ID' unless @_read4() is HEADER_CHUNK_ID
+    throw 'Invalid MIDI file: Missing header chuck size' unless @_read4() is HEADER_CHUNK_SIZE
     @formatType = @_read2()
     @numTracks = @_read2()
     @timeDiv = @_read2() # AKA ticks per beat
@@ -64,7 +64,7 @@ class MIDIFileReader
 
 
   _readTrack: (trackNumber) ->
-    throw 'Invalid track chunk ID' unless @_read4() is TRACK_CHUNK_ID
+    throw 'Invalid MIDI file: Missing track chunk ID' unless @_read4() is TRACK_CHUNK_ID
 
     @track = {number: trackNumber}
     @track.events = @events = []
@@ -76,7 +76,7 @@ class MIDIFileReader
     @end_of_track = false # Keeps track of whether we saw the meta event for end of track
 
     while @byteOffset < endByte
-      throw "Unexpected end of track event, track has more bytes" if @end_of_track
+      throw "Invalid MIDI file: End of track event occurred while track has more bytes" if @end_of_track
 
       deltaTime = @_readVarLen() # in ticks
       @timeOffset += deltaTime
@@ -87,7 +87,7 @@ class MIDIFileReader
         when SYSEX_EVENT,SYSEX_CHUNK then @_readSysExEvent(eventChunkType)
         else @_readChannelEvent((eventChunkType & 0xF0), (eventChunkType & 0x0F))
 
-    throw "Ran out of bytes in the track before encountering the end of track event" unless @end_of_track
+    throw "Invalid MIDI file: Missing end of track event" unless @end_of_track
     @tracks.push @track
     return
 
@@ -101,13 +101,29 @@ class MIDIFileReader
     # console.log "Meta Event: type #{type.toString(16)}, data: #{data}" if DEBUG
 
     event = switch type
-      when END_OF_TRACK
-        @end_of_track = true
-        null
-      else {time: @_currentTime(), type: "meta:#{type.toString(16)}", data: data}
-      # TODO: proper handling for the other meta event types
+      when SEQ_NUMBER then {type:'sequence number', number:(data[0]<<8)+data[1]}
+      when TEXT then {type:'text', data:data} # TODO: all this raw data needs to be converted to ASCII text
+      when COPYRIGHT then {type:'copyright', data:data}
+      when TRACK_NAME then {type:'track name', data:data}
+      when INSTRUMENT_NAME then {type:'instrument name', data:data}
+      when LYRICS then {type:'lyrics', data:data}
+      when MARKER then {type:'marker', data:data}
+      when CUE_POINT then {type:'cue point', data:data}
+      when CHANNEL_PREFIX then {type:'channel prefix', channel:data[0]}
+      when END_OF_TRACK then @end_of_track = true; null # don't treat this as an explicit event
+      when TEMPO then {type:'marker', data:data} # TODO convert data to a value
+      when SMPTE_OFFSET then {type:'marker', data:data} # TODO convert to frame rate, hour, min, sec, fr, subfr
+      when TIME_SIGNATURE then {type:'time signature', data:data} # TODO: interpret the data
+      when KEY_SIGNATURE then {type:'key signature', data:data} # TODO: interpret the data (need signed ints?)
+      when SEQ_SPECIFIC then {type:'sequencer specific', data:data}
+      else console.log "Warning: ignoring unknown meta event type #{type.toString(16)}"
 
-    @events.push event if event
+    # TODO: completing the above data-interpreting TODOs above is probably easier if we don't read
+    # the data before we know the event type
+
+    if event
+      event.time = @_currentTime()
+      @events.push event
     return
 
 
@@ -144,14 +160,14 @@ class MIDIFileReader
     event = switch typeMask
       when NOTE_OFF
         e = {type:'note', pitch:param1, velocity:param2, duration:duration}
-        e['off-velocity'] = param3 if param3
+        e['off velocity'] = param3 if param3
         e
       when NOTE_AFTERTOUCH then {type:'note aftertouch', pitch:param1, value:param2}
       when CONTROLLER then {type:'controller', number:param1, value:param2}
       when PROGRAM_CHANGE then {type:'program change', number:param1}
       when CHANNEL_AFTERTOUCH then {type:'channel aftertouch', value:param1}
       when PITCH_BEND then {type:'pitch bend', value:(param1<<7)+param2}
-      else console.log "Warning: ignoring unknown event type #{typeMask.toString(16)}"
+      else console.log "Warning: ignoring unknown channel event type #{typeMask.toString(16)}"
 
     event.time = @_currentTime()
     event.channel = channel
