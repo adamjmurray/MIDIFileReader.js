@@ -11,15 +11,6 @@ class MIDIFileReader
   SYSEX_EVENT = 0xF0
   SYSEX_CHUNK = 0xF7 # a continuation of a normal SysEx event
 
-  # Channel event types
-  NOTE_OFF           = 0x80
-  NOTE_ON            = 0x90
-  NOTE_AFTERTOUCH    = 0xA0
-  CONTROLLER         = 0xB0
-  PROGRAM_CHANGE     = 0xC0
-  CHANNEL_AFTERTOUCH = 0xD0
-  PITCH_BEND         = 0xE0
-
   # Meta event types
   SEQ_NUMBER      = 0x00
   TEXT            = 0x01
@@ -36,6 +27,15 @@ class MIDIFileReader
   TIME_SIGNATURE  = 0x58
   KEY_SIGNATURE   = 0x59
   SEQ_SPECIFIC    = 0x7F
+
+  # Channel event types
+  NOTE_OFF           = 0x80
+  NOTE_ON            = 0x90
+  NOTE_AFTERTOUCH    = 0xA0
+  CONTROLLER         = 0xB0
+  PROGRAM_CHANGE     = 0xC0
+  CHANNEL_AFTERTOUCH = 0xD0
+  PITCH_BEND         = 0xE0
 
 
   constructor: (@filepath) ->
@@ -73,18 +73,21 @@ class MIDIFileReader
 
     trackNumBytes = @_read4()
     endByte = @byteOffset + trackNumBytes
+    @end_of_track = false # Keeps track of whether we saw the meta event for end of track
 
     while @byteOffset < endByte
-      deltaTime = @_readVarLen() # in ticks
-      console.log "Delta time: #{deltaTime}" if DEBUG
-      @timeOffset += deltaTime
-      eventChunkType = @_read1()
+      throw "Unexpected end of track event, track has more bytes" if @end_of_track
 
+      deltaTime = @_readVarLen() # in ticks
+      @timeOffset += deltaTime
+
+      eventChunkType = @_read1()
       switch eventChunkType
         when META_EVENT then @_readMetaEvent()
         when SYSEX_EVENT,SYSEX_CHUNK then @_readSysExEvent(eventChunkType)
         else @_readChannelEvent((eventChunkType & 0xF0), (eventChunkType & 0x0F))
 
+    throw "Ran out of bytes in the track before encountering the end of track event" unless @end_of_track
     @tracks.push @track
     return
 
@@ -92,10 +95,19 @@ class MIDIFileReader
   _readMetaEvent: ->
     type = @_read1()
     length = @_readVarLen()
-    data = []
-    data.push @_read1() for _ in [0...length] by 1
-    console.log "Meta Event: type #{type.toString(16)}, data: #{data}" if DEBUG
-    @events.push {time: @_currentTime(), type: "meta:#{type.toString(16)}", data: data}
+    if length > 0
+      data = []
+      data.push @_read1() for _ in [0...length] by 1
+    # console.log "Meta Event: type #{type.toString(16)}, data: #{data}" if DEBUG
+
+    event = switch type
+      when END_OF_TRACK
+        @end_of_track = true
+        null
+      else {time: @_currentTime(), type: "meta:#{type.toString(16)}", data: data}
+      # TODO: proper handling for the other meta event types
+
+    @events.push event if event
     return
 
 
@@ -103,8 +115,8 @@ class MIDIFileReader
     length = @_readVarLen()
     data = []
     data.push @_read1() for _ in [0...length] by 1
-    console.log "Sysex Event: #{data}" if DEBUG
-    # TODO: handle divided events, etc
+    # console.log "Sysex Event: #{data}" if DEBUG
+    # TODO: handle divided events
     @events.push {time: @_currentTime(), type: "sysex:#{type.toString(16)}", data: data}
     return
 
@@ -128,8 +140,6 @@ class MIDIFileReader
       else
         console.log "Warning: ignoring note off event for pitch #{param1} because there was no corresponding note on event"
         return
-
-    console.log "Channel event: type #{typeName}, channel #{channel}, #{param1} #{param2}" if DEBUG
 
     event = switch typeMask
       when NOTE_OFF
@@ -159,7 +169,6 @@ class MIDIFileReader
   _read4: ->
     data = @buffer.readUInt32BE(@byteOffset)
     @byteOffset += 4
-    console.log '>',data.toString(16) if DEBUG
     data
 
 
@@ -167,14 +176,12 @@ class MIDIFileReader
   _read2: ->
     data = @buffer.readUInt16BE(@byteOffset)
     @byteOffset += 2
-    console.log '>',data.toString(16) if DEBUG
     data
 
 
   _read1: ->
     data = @buffer.readUInt8(@byteOffset)
     @byteOffset += 1
-    console.log '>',data.toString(16) if DEBUG
     data
 
 
