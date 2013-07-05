@@ -2,25 +2,40 @@ class MIDIFileReader
   # See http://www.sonicspot.com/guide/midifiles.html for details of MIDI file format
   # Also see http://www.music.mcgill.ca/~ich/classes/mumt306/midiformat.pdf
 
-  HEADER_CHUNK_ID = parseInt('4D546864', 16) # "MThd"
-  HEADER_CHUNK_SIZE = 6
-  TRACK_CHUNK_ID = parseInt('4D54726B', 16) # "MTrk"
+  HEADER_CHUNK_ID   = 0x4D546864 # "MThd"
+  HEADER_CHUNK_SIZE = 0x06       # All MIDI headers include 6 bytes after the chunk ID and chunk size
 
-  UPPER_4_BITS = 0xF0
-  LOWER_4_BITS = 0x0F
+  TRACK_CHUNK_ID    = 0x4D54726B # "MTrk"
 
-  EVENT_TYPE_META = 0xFF
-  EVENT_TYPE_SYSEX_NORMAL = 0xF0
-  EVENT_TYPE_SYSEX_SPECIAL = 0xF7 # a continuation of a normal SysEx event, or a SysEx "authorization" event
+  META_EVENT  = 0xFF
+  SYSEX_EVENT = 0xF0
+  SYSEX_CHUNK = 0xF7 # a continuation of a normal SysEx event
 
-  # Channel event types (extracted via UPPER_4_BITS bit mask; the lower 4 bits is the channel for these events)
-  NOTE_OFF = 0x80
-  NOTE_ON = 0x90
-  NOTE_AFTERTOUCH = 0xA0
-  CONTROLLER = 0xB0
-  PROGRAM_CHANGE = 0xC0
+  # Channel event types
+  NOTE_OFF           = 0x80
+  NOTE_ON            = 0x90
+  NOTE_AFTERTOUCH    = 0xA0
+  CONTROLLER         = 0xB0
+  PROGRAM_CHANGE     = 0xC0
   CHANNEL_AFTERTOUCH = 0xD0
-  PITCH_BEND = 0xE0
+  PITCH_BEND         = 0xE0
+
+  # Meta event types
+  SEQ_NUMBER      = 0x00
+  TEXT            = 0x01
+  COPYRIGHT       = 0x02
+  TRACK_NAME      = 0x03
+  INSTRUMENT_NAME = 0x04
+  LYRICS          = 0x05
+  MARKER          = 0x06
+  CUE_POINT       = 0x07
+  CHANNEL_PREFIX  = 0x20
+  END_OF_TRACK    = 0x2F
+  TEMPO           = 0x51
+  SMPTE_OFFSET    = 0x54
+  TIME_SIGNATURE  = 0x58
+  KEY_SIGNATURE   = 0x59
+  SEQ_SPECIFIC    = 0x7F
 
 
   constructor: (@filepath) ->
@@ -58,8 +73,6 @@ class MIDIFileReader
 
     trackNumBytes = @_read4()
     endByte = @byteOffset + trackNumBytes
-    console.log '------- TRACK --------' if DEBUG
-    console.log "Track has #{trackNumBytes} bytes" if DEBUG
 
     while @byteOffset < endByte
       deltaTime = @_readVarLen() # in ticks
@@ -68,9 +81,9 @@ class MIDIFileReader
       eventChunkType = @_read1()
 
       switch eventChunkType
-        when EVENT_TYPE_META then @_readMetaEvent()
-        when EVENT_TYPE_SYSEX_NORMAL, EVENT_TYPE_SYSEX_SPECIAL then @_readSysExEvent(eventChunkType)
-        else @_readChannelEvent((eventChunkType & UPPER_4_BITS), (eventChunkType & LOWER_4_BITS))
+        when META_EVENT then @_readMetaEvent()
+        when SYSEX_EVENT,SYSEX_CHUNK then @_readSysExEvent(eventChunkType)
+        else @_readChannelEvent((eventChunkType & 0xF0), (eventChunkType & 0x0F))
 
     @tracks.push @track
     return
