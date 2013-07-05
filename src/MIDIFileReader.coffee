@@ -35,6 +35,7 @@ class MIDIFileReader
   _readTrack: ->
     throw 'Invalid track chunk ID' unless @_read4() is TRACK_CHUNK_ID
     trackNumBytes = @_read4()
+    console.log '------- TRACK --------'
     console.log "Track has #{trackNumBytes} bytes" if DEBUG
     endOffset = @offset + trackNumBytes
     while @offset < endOffset
@@ -44,19 +45,26 @@ class MIDIFileReader
 
       if type == 0xFF # meta event
         type = @_read1()
-        data = @_readVarLen() # TODO: this is not the right thing to do for many event types
+        length = @_readVarLen()
+        data = []
+        data.push @_read1() for _ in [0...length] by 1
         console.log "Meta Event: type #{type.toString(16)}, data: #{data}"
 
       else if type == 0xF0 or type == 0xF7 #sysex
-        data = @_readVarLen()
+        length = @_readVarLen()
+        data = []
+        data.push @_read1() for _ in [0...length] by 1
         console.log "Sysex Event: #{data}"
         # TODO: handle divided events, etc
 
       else
         channel = (type & 0x0F)
-        type = (type & 0xF0)
+        type = (type & 0xF0) >> 4
         param1 = @_read1()
-        param2 = @_read1()
+        if type == 0xC or type == 0xD
+          param2 = null
+        else
+          param2 = @_read1()
         console.log "Channel event: type #{type.toString(16)}, channel #{channel}, #{param1} #{param2}"
 
     return
