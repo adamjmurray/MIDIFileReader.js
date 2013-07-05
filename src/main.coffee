@@ -10,3 +10,5 @@ midi.read ->
   console.log "MIDI format type: #{midi.formatType}"
   console.log "Number of tracks: #{midi.numTracks}"
   console.log "Time division: #{midi.timeDiv}"
+  console.log "Tracks:"
+  console.log JSON.stringify(midi.tracks, null, 2)
