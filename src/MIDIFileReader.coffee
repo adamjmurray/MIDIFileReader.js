@@ -7,6 +7,8 @@ class MIDIFileReader
 
   TRACK_CHUNK_ID    = 0x4D54726B # "MTrk"
 
+  MICROSECONDS_PER_MINUTE = 60000000
+
   META_EVENT  = 0xFF
   SYSEX_EVENT = 0xF0
   SYSEX_CHUNK = 0xF7 # a continuation of a normal SysEx event
@@ -94,32 +96,24 @@ class MIDIFileReader
 
   _readMetaEvent: ->
     type = @_read1()
-    length = @_readVarLen()
-    if length > 0
-      data = []
-      data.push @_read1() for _ in [0...length] by 1
-    # console.log "Meta Event: type #{type.toString(16)}, data: #{data}" if DEBUG
 
     event = switch type
-      when SEQ_NUMBER then {type:'sequence number', number:(data[0]<<8)+data[1]}
-      when TEXT then {type:'text', data:data} # TODO: all this raw data needs to be converted to ASCII text
-      when COPYRIGHT then {type:'copyright', data:data}
-      when TRACK_NAME then {type:'track name', data:data}
-      when INSTRUMENT_NAME then {type:'instrument name', data:data}
-      when LYRICS then {type:'lyrics', data:data}
-      when MARKER then {type:'marker', data:data}
-      when CUE_POINT then {type:'cue point', data:data}
-      when CHANNEL_PREFIX then {type:'channel prefix', channel:data[0]}
-      when END_OF_TRACK then @end_of_track = true; null # don't treat this as an explicit event
-      when TEMPO then {type:'marker', data:data} # TODO convert data to a value
-      when SMPTE_OFFSET then {type:'marker', data:data} # TODO convert to frame rate, hour, min, sec, fr, subfr
-      when TIME_SIGNATURE then {type:'time signature', data:data} # TODO: interpret the data
-      when KEY_SIGNATURE then {type:'key signature', data:data} # TODO: interpret the data (need signed ints?)
-      when SEQ_SPECIFIC then {type:'sequencer specific', data:data}
+      when SEQ_NUMBER then {type:'sequence number', number:@_readMetaValue()}
+      when TEXT then {type:'text', text:@_readMetaText()}
+      when COPYRIGHT then {type:'copyright', text:@_readMetaText()}
+      when TRACK_NAME then {type:'track name', text:@_readMetaText()}
+      when INSTRUMENT_NAME then {type:'instrument name', text:@_readMetaText()}
+      when LYRICS then {type:'lyrics', text:@_readMetaText()}
+      when MARKER then {type:'marker', text:@_readMetaText()}
+      when CUE_POINT then {type:'cue point', text:@_readMetaText()}
+      when CHANNEL_PREFIX then {type:'channel prefix', channel:@_readMetaValue()}
+      when END_OF_TRACK then @_readMetaValue(); @end_of_track = true; null # don't treat this as an explicit event
+      when TEMPO then {type:'marker', bpm:MICROSECONDS_PER_MINUTE/@_readMetaValue()} # value is microseconds per beat
+      when SMPTE_OFFSET then {type:'marker', data:@_readMetaData()} # TODO convert to frame rate, hour, min, sec, fr, subfr
+      when TIME_SIGNATURE then {type:'time signature', data:@_readMetaData()} # TODO: interpret the data
+      when KEY_SIGNATURE then {type:'key signature', data:@_readMetaData()} # TODO: interpret the data (need signed ints?)
+      when SEQ_SPECIFIC then {type:'sequencer specific', data:@_readMetaData()}
       else console.log "Warning: ignoring unknown meta event type #{type.toString(16)}"
-
-    # TODO: completing the above data-interpreting TODOs above is probably easier if we don't read
-    # the data before we know the event type
 
     if event
       event.time = @_currentTime()
@@ -179,6 +173,31 @@ class MIDIFileReader
   # current track time, in beats (@timeOffset is in tickets, and @timeDiv is the ticks per beat)
   _currentTime: ->
     @timeOffset/@timeDiv
+
+
+  # Read variable length numeric value in meta events
+  _readMetaValue: ->
+    length = @_readVarLen()
+    value = 0
+    value = (value << 8) + @_read1() for _ in [0...length] by 1
+    value
+
+
+  # Read variable length ASCII text data in meta events
+  _readMetaText: ->
+    length = @_readVarLen()
+    data = []
+    data.push @_read1() for _ in [0...length] by 1
+    String.fromCharCode.apply(this,data)
+
+
+  # Read an array of meta data bytes
+  _readMetaData: ->
+    length = @_readVarLen()
+    if length > 0
+      data = []
+      data.push @_read1() for _ in [0...length] by 1
+    data
 
 
   # read next 4 bytes
