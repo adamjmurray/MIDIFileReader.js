@@ -1,7 +1,7 @@
 filepath = process.argv[2]
 throw 'MIDI input file path is required' unless filepath
 
-midi = new MIDIFileReader filepath, NodeFileReader
+midi = new MIDIFileReader filepath, NodeFileBuffer
 midi.read ->
   console.log "Tracks:"
   console.log JSON.stringify(midi.tracks, null, 2)
