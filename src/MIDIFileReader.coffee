@@ -201,8 +201,8 @@ class MIDIFileReader
   # read a variable length chunk of bytes
   _readVarLen: ->
     data = 0
-    byte = @reader.uInt8()
-    while (byte & 0x80) != 0
-      data = (data << 7) + (byte & 0x7F)
-      byte = @reader.uInt8()
-    (data << 7) + (byte & 0x7F)
+    _byte = @reader.uInt8()
+    while (_byte & 0x80) != 0
+      data = (data << 7) + (_byte & 0x7F)
+      _byte = @reader.uInt8()
+    (data << 7) + (_byte & 0x7F)
