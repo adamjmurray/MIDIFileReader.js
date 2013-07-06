@@ -40,13 +40,11 @@ class MIDIFileReader
   PITCH_BEND         = 0xE0
 
 
-  constructor: (@filepath, readerClass) ->
-    @reader = new readerClass(@filepath)
+  constructor: (@stream) ->
 
 
   read: (callback) ->
-    console.log("Reading #{@filepath}")
-    @reader.openFile =>
+    @stream.open =>
       @tracks = []
       @_readHeader()
       @_readTrack(trackNumber) for trackNumber in [1..@numTracks] by 1
@@ -55,33 +53,33 @@ class MIDIFileReader
 
 
   _readHeader: ->
-    throw 'Invalid MIDI file: Missing header chuck ID' unless @reader.uInt32BE() is HEADER_CHUNK_ID
-    throw 'Invalid MIDI file: Missing header chuck size' unless @reader.uInt32BE() is HEADER_CHUNK_SIZE
-    @formatType = @reader.uInt16BE()
-    @numTracks = @reader.uInt16BE()
-    @timeDiv = @reader.uInt16BE() # AKA ticks per beat
+    throw 'Invalid MIDI file: Missing header chuck ID' unless @stream.uInt32BE() is HEADER_CHUNK_ID
+    throw 'Invalid MIDI file: Missing header chuck size' unless @stream.uInt32BE() is HEADER_CHUNK_SIZE
+    @formatType = @stream.uInt16BE()
+    @numTracks = @stream.uInt16BE()
+    @timeDiv = @stream.uInt16BE() # AKA ticks per beat
     return
 
 
   _readTrack: (trackNumber) ->
-    throw 'Invalid MIDI file: Missing track chunk ID' unless @reader.uInt32BE() is TRACK_CHUNK_ID
+    throw 'Invalid MIDI file: Missing track chunk ID' unless @stream.uInt32BE() is TRACK_CHUNK_ID
 
     @track = {number: trackNumber}
     @track.events = @events = []
     @notes = {}
     @timeOffset = 0
 
-    trackNumBytes = @reader.uInt32BE()
-    endByte = @reader.byteOffset + trackNumBytes
+    trackNumBytes = @stream.uInt32BE()
+    endByte = @stream.byteOffset + trackNumBytes
     @end_of_track = false # Keeps track of whether we saw the meta event for end of track
 
-    while @reader.byteOffset < endByte
+    while @stream.byteOffset < endByte
       throw "Invalid MIDI file: End of track event occurred while track has more bytes" if @end_of_track
 
       deltaTime = @_readVarLen() # in ticks
       @timeOffset += deltaTime
 
-      eventChunkType = @reader.uInt8()
+      eventChunkType = @stream.uInt8()
       switch eventChunkType
         when META_EVENT then @_readMetaEvent()
         when SYSEX_EVENT,SYSEX_CHUNK then @_readSysExEvent(eventChunkType)
@@ -93,7 +91,7 @@ class MIDIFileReader
 
 
   _readMetaEvent: ->
-    type = @reader.uInt8()
+    type = @stream.uInt8()
 
     event = switch type
       when SEQ_NUMBER then {type:'sequence number', number:@_readMetaValue()}
@@ -122,15 +120,15 @@ class MIDIFileReader
   _readSysExEvent: (type) ->
     length = @_readVarLen()
     data = []
-    data.push @reader.uInt8() for _ in [0...length] by 1
+    data.push @stream.uInt8() for _ in [0...length] by 1
     # TODO: handle divided events
     @events.push {time: @_currentTime(), type: "sysex:#{type.toString(16)}", data: data}
     return
 
 
   _readChannelEvent: (typeMask, channel) ->
-    param1 = @reader.uInt8()
-    param2 = @reader.uInt8() unless typeMask == PROGRAM_CHANGE or typeMask == CHANNEL_AFTERTOUCH
+    param1 = @stream.uInt8()
+    param2 = @stream.uInt8() unless typeMask == PROGRAM_CHANGE or typeMask == CHANNEL_AFTERTOUCH
 
     if typeMask == NOTE_ON
       if @notes[param1]
@@ -176,7 +174,7 @@ class MIDIFileReader
   _readMetaValue: ->
     length = @_readVarLen()
     value = 0
-    value = (value << 8) + @reader.uInt8() for _ in [0...length] by 1
+    value = (value << 8) + @stream.uInt8() for _ in [0...length] by 1
     value
 
 
@@ -184,7 +182,7 @@ class MIDIFileReader
   _readMetaText: ->
     length = @_readVarLen()
     data = []
-    data.push @reader.uInt8() for _ in [0...length] by 1
+    data.push @stream.uInt8() for _ in [0...length] by 1
     String.fromCharCode.apply(this,data)
 
 
@@ -193,15 +191,15 @@ class MIDIFileReader
     length = @_readVarLen()
     if length > 0
       data = []
-      data.push @reader.uInt8() for _ in [0...length] by 1
+      data.push @stream.uInt8() for _ in [0...length] by 1
     data
 
 
   # read a variable length chunk of bytes
   _readVarLen: ->
     data = 0
-    _byte = @reader.uInt8()
+    _byte = @stream.uInt8()
     while (_byte & 0x80) != 0
       data = (data << 7) + (_byte & 0x7F)
-      _byte = @reader.uInt8()
+      _byte = @stream.uInt8()
     (data << 7) + (_byte & 0x7F)

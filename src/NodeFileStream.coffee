@@ -1,5 +1,5 @@
-# FileBuffer interface for Node.js
-class NodeFileBuffer
+# FileStream interface for Node.js
+class NodeFileStream
 
   FS = require 'fs'
 
@@ -7,7 +7,8 @@ class NodeFileBuffer
   constructor: (@filepath) ->
 
 
-  openFile: (onSuccess,onError) ->
+  open: (onSuccess,onError) ->
+    console.log "Reading #{@filepath}"
     FS.readFile @filepath, (error, buffer) =>
       if error
         if onError then onError(error) else throw error

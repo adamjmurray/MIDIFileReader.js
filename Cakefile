@@ -10,7 +10,7 @@ DIST_DIR = "#{BASE_DIR}/dist"
 src_for = (name) -> "#{SRC_DIR}/#{name}.coffee"
 
 BASE_SRC_FILES = (src_for name for name in [
-  'NodeFileBuffer'
+  'NodeFileStream'
   'MIDIFileReader'
 ])
 SRC_FILES = BASE_SRC_FILES.concat src_for('main')
