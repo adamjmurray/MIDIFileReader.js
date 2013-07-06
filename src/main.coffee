@@ -1,5 +1,3 @@
-DEBUG = process.env.DEBUG
-
 filepath = process.argv[2]
 throw 'MIDI input file path is required' unless filepath
 

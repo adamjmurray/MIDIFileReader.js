@@ -123,7 +123,6 @@ class MIDIFileReader
     length = @_readVarLen()
     data = []
     data.push @reader.uInt8() for _ in [0...length] by 1
-    # console.log "Sysex Event: #{data}" if DEBUG
     # TODO: handle divided events
     @events.push {time: @_currentTime(), type: "sysex:#{type.toString(16)}", data: data}
     return
