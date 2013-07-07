@@ -1,6 +1,8 @@
 class MIDIFileReader
-  # See http://www.sonicspot.com/guide/midifiles.html for details of MIDI file format
-  # Also see http://www.music.mcgill.ca/~ich/classes/mumt306/midiformat.pdf
+  # For details of MIDI file format, see:
+  # http://www.sonicspot.com/guide/midifiles.html
+  # http://www.somascape.org/midi/tech/mfile.html
+  # http://www.music.mcgill.ca/~ich/classes/mumt306/midiformat.pdf
 
   HEADER_CHUNK_ID   = 0x4D546864 # "MThd"
   HEADER_CHUNK_SIZE = 0x06       # All MIDI headers include 6 bytes after the chunk ID and chunk size
@@ -38,6 +40,23 @@ class MIDIFileReader
   PROGRAM_CHANGE     = 0xC0
   CHANNEL_AFTERTOUCH = 0xD0
   PITCH_BEND         = 0xE0
+
+  KEY_VALUE_TO_NAME =
+    0:  'C'
+    1:  'G'
+    2:  'D'
+    3:  'A'
+    4:  'E'
+    5:  'B'
+    6:  'F#'
+    7:  'C#'
+    '-1': 'F'
+    '-2': 'Bb'
+    '-3': 'Eb'
+    '-4': 'Ab'
+    '-5': 'Db'
+    '-6': 'Gb'
+    '-7': 'Cb'
 
 
   constructor: (@stream) ->
@@ -116,8 +135,19 @@ class MIDIFileReader
         hour = firstByte & 0x1F # last 5 bites, in binary: & 00011111
         {type:'smpte offset', framerate:framerate, hour:hour, minute:minute, second:second, frame:frame, subframe:subframe}
 
-      when TIME_SIGNATURE then {type:'time signature', data:@_readMetaData()} # TODO: interpret the data
-      when KEY_SIGNATURE then {type:'key signature', data:@_readMetaData()} # TODO: interpret the data (need signed ints?)
+      when TIME_SIGNATURE
+        {type:'time signature', data:@_readMetaData()} # TODO: interpret the data
+
+      when KEY_SIGNATURE
+        [keyValue, scaleValue] = @_readMetaData()
+        keyValue = (keyValue ^ 128) - 128 # convert from unsigned byte to signed byte
+        key = KEY_VALUE_TO_NAME[keyValue] || keyValue # TODO: interpret key values for minor keys
+        scale = switch scaleValue
+          when 0 then 'major'
+          when 1 then 'minor'
+          else scaleValue
+        {type:'key signature', key:key, scale:scale}
+
       when SEQ_SPECIFIC then {type:'sequencer specific', data:@_readMetaData()}
       else console.log "Warning: ignoring unknown meta event type #{type.toString(16)}, with data #{@_readMetaData()}"
 
