@@ -17,7 +17,7 @@ class MIDIFileReader
   SEQ_NUMBER      = 0x00
   TEXT            = 0x01
   COPYRIGHT       = 0x02
-  TRACK_NAME      = 0x03
+  SEQ_NAME        = 0x03
   INSTRUMENT_NAME = 0x04
   LYRICS          = 0x05
   MARKER          = 0x06
@@ -48,6 +48,7 @@ class MIDIFileReader
       @tracks = []
       @_readHeader()
       @_readTrack(trackNumber) for trackNumber in [1..@numTracks] by 1
+      # TODO: inspect @notes data structure and issue warnings if not empty (we missed some note offs)
       callback() if callback
     return
 
@@ -83,7 +84,7 @@ class MIDIFileReader
       switch eventChunkType
         when META_EVENT then @_readMetaEvent()
         when SYSEX_EVENT,SYSEX_CHUNK then @_readSysExEvent(eventChunkType)
-        else @_readChannelEvent((eventChunkType & 0xF0), (eventChunkType & 0x0F))
+        else @_readChannelEvent(eventChunkType)
 
     throw "Invalid MIDI file: Missing end of track event" unless @end_of_track
     @tracks.push @track
@@ -97,19 +98,28 @@ class MIDIFileReader
       when SEQ_NUMBER then {type:'sequence number', number:@_readMetaValue()}
       when TEXT then {type:'text', text:@_readMetaText()}
       when COPYRIGHT then {type:'copyright', text:@_readMetaText()}
-      when TRACK_NAME then {type:'track name', text:@_readMetaText()}
+      when SEQ_NAME then {type:'sequence name', text:@_readMetaText()}
       when INSTRUMENT_NAME then {type:'instrument name', text:@_readMetaText()}
       when LYRICS then {type:'lyrics', text:@_readMetaText()}
       when MARKER then {type:'marker', text:@_readMetaText()}
       when CUE_POINT then {type:'cue point', text:@_readMetaText()}
       when CHANNEL_PREFIX then {type:'channel prefix', channel:@_readMetaValue()}
       when END_OF_TRACK then @_readMetaValue(); @end_of_track = true; null # don't treat this as an explicit event
-      when TEMPO then {type:'marker', bpm:MICROSECONDS_PER_MINUTE/@_readMetaValue()} # value is microseconds per beat
-      when SMPTE_OFFSET then {type:'marker', data:@_readMetaData()} # TODO convert to frame rate, hour, min, sec, fr, subfr
+      when TEMPO then {type:'tempo', bpm:MICROSECONDS_PER_MINUTE/@_readMetaValue()} # value is microseconds per beat
+      when SMPTE_OFFSET
+        [firstByte, minute, second, frame, subframe] = @_readMetaData()
+        framerate = switch (firstByte & 0x60) >> 5 # extract 2nd+3rd bits for frame rate info. In binary: & 01100000
+          when 0 then 24
+          when 1 then 25
+          when 2 then 29.97
+          when 3 then 30 # TODO: test all these via MIDI exports from Logic Pro
+        hour = firstByte & 0x1F # last 5 bites, in binary: & 00011111
+        {type:'smpte offset', framerate:framerate, hour:hour, minute:minute, second:second, frame:frame, subframe:subframe}
+
       when TIME_SIGNATURE then {type:'time signature', data:@_readMetaData()} # TODO: interpret the data
       when KEY_SIGNATURE then {type:'key signature', data:@_readMetaData()} # TODO: interpret the data (need signed ints?)
       when SEQ_SPECIFIC then {type:'sequencer specific', data:@_readMetaData()}
-      else console.log "Warning: ignoring unknown meta event type #{type.toString(16)}"
+      else console.log "Warning: ignoring unknown meta event type #{type.toString(16)}, with data #{@_readMetaData()}"
 
     if event
       event.time = @_currentTime()
@@ -126,42 +136,54 @@ class MIDIFileReader
     return
 
 
-  _readChannelEvent: (typeMask, channel) ->
-    param1 = @stream.uInt8()
-    param2 = @stream.uInt8() unless typeMask == PROGRAM_CHANGE or typeMask == CHANNEL_AFTERTOUCH
+  _readChannelEvent: (eventChunkType, nextByte) ->
+    typeMask = (eventChunkType & 0xF0)
+    channel = (eventChunkType & 0x0F)
 
-    if typeMask == NOTE_ON
-      if @notes[param1]
-        console.log "Warning: ignoring overlapping note on for pitch #{param1}" # TODO, support this case?
-      @notes[param1] = [param2,@_currentTime()] # param1 is the pitch, param2 is velocity
-      return # we'll create a 'note' event when we see the corresponding note_off
+    switch typeMask
+      when NOTE_ON
+        pitch = nextByte || @stream.uInt8()
+        velocity = @stream.uInt8()
+        if velocity == 0 # treat like note off with no off velocity
+          if not @notes[pitch]
+            console.log "Warning: ignoring note off event (note on with velocity 0) for pitch #{pitch} because there was no corresponding note on event"
+            return
+          [velocity,startTime] = @notes[pitch]
+          delete @notes[pitch]
+          event = {type:'note', pitch:pitch, velocity:velocity, duration:(@_currentTime() - startTime)}
+        else if @notes[pitch]
+          console.log "Warning: ignoring overlapping note on for pitch #{pitch}" # TODO, support this case?
+          return
+        else
+          @notes[pitch] = [velocity,@_currentTime()]
+          @prevEventChunkType = eventChunkType
+          return # we'll create a "note" event when we see the corresponding note_off
 
-    if typeMask == NOTE_OFF
-      if @notes[param1]
-        param3 = param2 # the off velocity, if any
-        [param2,startTime] = @notes[param1] # the on velocity
-        delete @notes[param1]
-        duration = @_currentTime() - startTime
+      when NOTE_OFF
+        pitch = nextByte || @stream.uInt8()
+        offVelocity = @stream.uInt8()
+        if not @notes[pitch]
+          console.log "Warning: ignoring note off event for pitch #{pitch} because there was no corresponding note on event"
+          return
+        [velocity,startTime] = @notes[pitch]
+        delete @notes[pitch]
+        event = {type:'note', pitch:pitch, velocity:velocity, duration:(@_currentTime() - startTime)}
+        event['off velocity'] = offVelocity if offVelocity
+
+      when NOTE_AFTERTOUCH then event = {type:'note aftertouch', pitch:(nextByte || @stream.uInt8()), value:@stream.uInt8()}
+      when CONTROLLER then event = {type:'controller', number:(nextByte || @stream.uInt8()), value:@stream.uInt8()}
+      when PROGRAM_CHANGE then event = {type:'program change', number:(nextByte || @stream.uInt8())}
+      when CHANNEL_AFTERTOUCH then event = {type:'channel aftertouch', value:(nextByte || @stream.uInt8())}
+      when PITCH_BEND then event = {type:'pitch bend', value:((nextByte || @stream.uInt8())<<7)+@stream.uInt8()}
       else
-        console.log "Warning: ignoring note off event for pitch #{param1} because there was no corresponding note on event"
+        # "running status" event using same type and channel of previous event
+        @_readChannelEvent(@prevEventChunkType, eventChunkType)
         return
 
-    event = switch typeMask
-      when NOTE_OFF
-        e = {type:'note', pitch:param1, velocity:param2, duration:duration}
-        e['off velocity'] = param3 if param3
-        e
-      when NOTE_AFTERTOUCH then {type:'note aftertouch', pitch:param1, value:param2}
-      when CONTROLLER then {type:'controller', number:param1, value:param2}
-      when PROGRAM_CHANGE then {type:'program change', number:param1}
-      when CHANNEL_AFTERTOUCH then {type:'channel aftertouch', value:param1}
-      when PITCH_BEND then {type:'pitch bend', value:(param1<<7)+param2}
-      else console.log "Warning: ignoring unknown channel event type #{typeMask.toString(16)}"
-
-    event.time = @_currentTime()
     event.channel = channel
-
+    event.time = @_currentTime()
     @events.push event
+    @prevEventChunkType = eventChunkType
     return
 
 
