@@ -1,5 +1,6 @@
 build
 dist
-*.mid
 *.log
 node_modules
+test/*.js
+/*.mid

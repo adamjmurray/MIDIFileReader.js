@@ -1,9 +1,18 @@
 {
   "name": "midi-file-reader",
-  "version": "0.1",
-  "dependencies": {
+  "version": "0.1.0",
+  "devDependencies": {
     "jasmine-node": "~1.10.1",
     "uglify-js": "~2.3.6",
     "colors": "~0.6.0"
-  }
+  },
+  "scripts": {
+    "test": "cake test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:adamjmurray/MIDIFileReader.js.git"
+  },
+  "author": "Adam Murray",
+  "license": "BSD"
 }

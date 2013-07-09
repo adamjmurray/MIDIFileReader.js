@@ -1,13 +1,22 @@
 MIDIFileReader.js
 =================
 
-This will be a lightweight library to read the Standard MIDI File (SMF) format.
+A lightweight JavaScript library to read the Standard MIDI File (SMF) format.
 
-This is very much an experimental work in progress and not ready yet. So far it can read the MIDI file metadata out of the file header.
+Requires [Node.js](http://nodejs.org/).
 
-Requires Node.js.
+Install depdendencies:
 
-Currently I run it like so:
+        npm install
+
+Build:
 
         cake build
+
+Run:
+
         node build/MIDIFileReader.js {MIDI_file_path}
+
+Test:
+
+         npm test

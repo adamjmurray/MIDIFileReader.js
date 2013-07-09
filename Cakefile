@@ -65,7 +65,7 @@ task 'validate', 'validate syntax', ->
 
 task 'test', 'run the unit tests', ->
   exec 'coffee', ['--compile', '--join', TEST_OUT_FILE].concat(TEST_FILES), {}, ->
-    exec 'jasmine-node', ['--coffee', '--matchall', '--verbose', TEST_DIR]
+    exec 'jasmine-node', ['--coffee', '--matchall', '--noStack', TEST_DIR]
 
 
 task 'release', 'build the app (release version, minified)', ->
