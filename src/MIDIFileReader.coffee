@@ -136,7 +136,8 @@ class MIDIFileReader
         {type:'smpte offset', framerate:framerate, hour:hour, minute:minute, second:second, frame:frame, subframe:subframe}
 
       when TIME_SIGNATURE
-        {type:'time signature', data:@_readMetaData()} # TODO: interpret the data
+        [numerator,denominatorPower] = @_readMetaData() # ignoring "metronome" and "32nds" values
+        {type:'time signature', numerator:numerator, denominator:Math.pow(2,denominatorPower)}
 
       when KEY_SIGNATURE
         [keyValue, scaleValue] = @_readMetaData()
