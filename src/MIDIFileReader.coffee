@@ -100,10 +100,14 @@ class MIDIFileReader
       @timeOffset += deltaTime
 
       eventChunkType = @stream.uInt8()
-      switch eventChunkType
+      event = switch eventChunkType
         when META_EVENT then @_readMetaEvent()
         when SYSEX_EVENT,SYSEX_CHUNK then @_readSysExEvent(eventChunkType)
         else @_readChannelEvent(eventChunkType)
+
+      if event
+        event.time ?= @_currentTime() # might have been set in _readNoteOff()
+        @events.push event
 
     throw "Invalid MIDI file: Missing end of track event" unless @end_of_track
     @tracks.push @track
@@ -152,10 +156,7 @@ class MIDIFileReader
       when SEQ_SPECIFIC then {type:'sequencer specific', data:@_readMetaData()}
       else console.log "Warning: ignoring unknown meta event type #{type.toString(16)}, with data #{@_readMetaData()}"
 
-    if event
-      event.time = @_currentTime()
-      @events.push event
-    return
+    event
 
 
   _readSysExEvent: (type) ->
@@ -163,8 +164,7 @@ class MIDIFileReader
     data = []
     data.push @stream.uInt8() for _ in [0...length] by 1
     # TODO: handle divided events
-    @events.push {time: @_currentTime(), type: "sysex:#{type.toString(16)}", data: data}
-    return
+    {type: "sysex:#{type.toString(16)}", data: data}
 
 
   _readChannelEvent: (eventChunkType) ->
@@ -184,15 +184,12 @@ class MIDIFileReader
         runningStatus = true
         @stream.feedByte(eventChunkType) # this will be returned by the next @stream.uInt8() call
         @_readChannelEvent(@prevEventChunkType)
-        null
 
-    if event
-      event.channel = channel
-      event.time ?= @_currentTime() # might have been set in _readNoteOff()
-      @events.push event
+    unless runningStatus
+      event.channel = channel if event
+      @prevEventChunkType = eventChunkType
 
-    @prevEventChunkType = eventChunkType unless runningStatus
-    return
+    event
 
 
   _readNoteOn: ->
