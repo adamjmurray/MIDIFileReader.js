@@ -91,10 +91,10 @@ class MIDIFileReader
 
     trackNumBytes = @stream.uInt32BE()
     endByte = @stream.byteOffset + trackNumBytes
-    @end_of_track = false # Keeps track of whether we saw the meta event for end of track
+    @endOfTrack = false # Keeps track of whether we saw the meta event for end of track
 
     while @stream.byteOffset < endByte
-      throw "Invalid MIDI file: End of track event occurred while track has more bytes" if @end_of_track
+      throw "Invalid MIDI file: End of track event occurred while track has more bytes" if @endOfTrack
 
       deltaTime = @_readVarLen() # in ticks
       @timeOffset += deltaTime
@@ -109,7 +109,7 @@ class MIDIFileReader
         event.time ?= @_currentTime() # might have been set in _readNoteOff()
         @events.push event
 
-    throw "Invalid MIDI file: Missing end of track event" unless @end_of_track
+    throw "Invalid MIDI file: Missing end of track event" unless @endOfTrack
     @tracks.push @track
     return
 
@@ -127,7 +127,7 @@ class MIDIFileReader
       when MARKER then {type:'marker', text:@_readMetaText()}
       when CUE_POINT then {type:'cue point', text:@_readMetaText()}
       when CHANNEL_PREFIX then {type:'channel prefix', channel:@_readMetaValue()}
-      when END_OF_TRACK then @_readMetaValue(); @end_of_track = true; null # don't treat this as an explicit event
+      when END_OF_TRACK then @_readMetaValue(); @endOfTrack = true; null # don't treat this as an explicit event
       when TEMPO then {type:'tempo', bpm:MICROSECONDS_PER_MINUTE/@_readMetaValue()} # value is microseconds per beat
       when SMPTE_OFFSET
         [firstByte, minute, second, frame, subframe] = @_readMetaData()
