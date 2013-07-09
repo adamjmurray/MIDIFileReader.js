@@ -171,55 +171,55 @@ class MIDIFileReader
     typeMask = (eventChunkType & 0xF0)
     channel = (eventChunkType & 0x0F) + 1
 
-    switch typeMask
-      when NOTE_ON
-        pitch = @stream.uInt8()
-        velocity = @stream.uInt8()
-        if velocity == 0 # treat like note off with no off velocity
-          if not @notes[pitch]
-            console.log "Warning: ignoring note off event (note on with velocity 0) for pitch #{pitch} because there was no corresponding note on event"
-            return
-          [velocity,startTime] = @notes[pitch]
-          delete @notes[pitch]
-          event = {type:'note', pitch:pitch, velocity:velocity, duration:(@_currentTime() - startTime)}
-          event.time = startTime
-        else if @notes[pitch]
-          console.log "Warning: ignoring overlapping note on for pitch #{pitch}" # TODO, support this case?
-          return
-        else
-          @notes[pitch] = [velocity,@_currentTime()]
-          @prevEventChunkType = eventChunkType
-          return # we'll create a "note" event when we see the corresponding note_off
-
-      when NOTE_OFF
-        pitch = @stream.uInt8()
-        offVelocity = @stream.uInt8()
-        if not @notes[pitch]
-          console.log "Warning: ignoring note off event for pitch #{pitch} because there was no corresponding note on event"
-          return
-        [velocity,startTime] = @notes[pitch]
-        delete @notes[pitch]
-        event = {type:'note', pitch:pitch, velocity:velocity, duration:(@_currentTime() - startTime)}
-        event['off velocity'] = offVelocity if offVelocity
-        event.time = startTime
-
-      when NOTE_AFTERTOUCH then event = {type:'note aftertouch', pitch:@stream.uInt8(), value:@stream.uInt8()}
-      when CONTROLLER then event = {type:'controller', number:@stream.uInt8(), value:@stream.uInt8()}
-      when PROGRAM_CHANGE then event = {type:'program change', number:@stream.uInt8()}
-      when CHANNEL_AFTERTOUCH then event = {type:'channel aftertouch', value:(@stream.uInt8())}
-      when PITCH_BEND then event = {type:'pitch bend', value:(@stream.uInt8()<<7)+@stream.uInt8()}
+    event = switch typeMask
+      when NOTE_ON then @_readNoteOn()
+      when NOTE_OFF then @_readNoteOff()
+      when NOTE_AFTERTOUCH then {type:'note aftertouch', pitch:@stream.uInt8(), value:@stream.uInt8()}
+      when CONTROLLER then {type:'controller', number:@stream.uInt8(), value:@stream.uInt8()}
+      when PROGRAM_CHANGE then {type:'program change', number:@stream.uInt8()}
+      when CHANNEL_AFTERTOUCH then {type:'channel aftertouch', value:(@stream.uInt8())}
+      when PITCH_BEND then {type:'pitch bend', value:(@stream.uInt8()<<7)+@stream.uInt8()}
       else
         # "running status" event using same type and channel of previous event
+        runningStatus = true
         @stream.feedByte(eventChunkType) # this will be returned by the next @stream.uInt8() call
         @_readChannelEvent(@prevEventChunkType)
-        return
+        null
 
-    event.channel = channel
-    event.time ?= @_currentTime()
+    if event
+      event.channel = channel
+      event.time ?= @_currentTime() # might have been set in _readNoteOff()
+      @events.push event
 
-    @events.push event
-    @prevEventChunkType = eventChunkType
+    @prevEventChunkType = eventChunkType unless runningStatus
     return
+
+
+  _readNoteOn: ->
+    pitch = @stream.uInt8()
+    velocity = @stream.uInt8()
+    if velocity == 0 # treat like note off with no off velocity
+      return @_readNoteOff(pitch)
+    else if @notes[pitch]
+      console.log "Warning: ignoring overlapping note on for pitch #{pitch}" # TODO, support this case?
+    else
+      @notes[pitch] = [velocity,@_currentTime()]
+    return # we'll create a "note" event when we see the corresponding note_off
+
+
+  _readNoteOff: (pitch) ->
+    unless pitch # if passed in, this is the pitch of a 0 velocity note on message being treated as a note off
+      pitch = @stream.uInt8()
+      offVelocity = @stream.uInt8()
+    if not @notes[pitch]
+      console.log "Warning: ignoring note off event for pitch #{pitch} because there was no corresponding note on event"
+      return
+    [velocity,startTime] = @notes[pitch]
+    delete @notes[pitch]
+    event = {type:'note', pitch:pitch, velocity:velocity, duration:(@_currentTime() - startTime)}
+    event['off velocity'] = offVelocity if offVelocity
+    event.time = startTime
+    event
 
 
   # current track time, in beats (@timeOffset is in tickets, and @timeDiv is the ticks per beat)
