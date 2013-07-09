@@ -30,7 +30,6 @@ describe 'MIDIController', ->
                 pitch: 60,
                 velocity: 95,
                 duration: 1,
-                'off velocity': 95,
                 time: 0,
                 channel: 1
               },
@@ -39,7 +38,6 @@ describe 'MIDIController', ->
                 pitch: 62,
                 velocity: 95,
                 duration: 1,
-                'off velocity': 95,
                 time: 1,
                 channel: 1
               },
@@ -48,7 +46,6 @@ describe 'MIDIController', ->
                 pitch: 64,
                 velocity: 95,
                 duration: 1,
-                'off velocity': 95,
                 time: 2,
                 channel: 1
               }
