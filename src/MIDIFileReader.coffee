@@ -211,13 +211,13 @@ class MIDIFileReader
   _readNoteOff: (pitch) ->
     unless pitch # if passed in, this is the pitch of a 0 velocity note on message being treated as a note off
       pitch = @stream.uInt8()
-      offVelocity = @stream.uInt8()
+      release = @stream.uInt8() # AKA "off velocity"
 
     if @notes[pitch]
       [velocity,startTime] = @notes[pitch]
       delete @notes[pitch]
       event = {type:'note', pitch:pitch, velocity:velocity, duration:(@_currentTime() - startTime)}
-      event['off velocity'] = offVelocity if offVelocity
+      event.release = release if release
       event.time = startTime
       event
     else
