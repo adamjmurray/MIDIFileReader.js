@@ -3,7 +3,7 @@ MIDIFileReader.js
 
 A lightweight JavaScript library to read the Standard MIDI File (SMF) format.
 
-[![Build Status](https://secure.travis-ci.org/adamjmurray/MIDIFileReader.js.png)](http://travis-ci.org/adamjmurray/MIDIFileReader.js)
+[![Build Status](https://travis-ci.org/adamjmurray/MIDIFileReader.js.png?branch=master)](https://travis-ci.org/adamjmurray/MIDIFileReader.js)
 
 Requires [Node.js](http://nodejs.org/).
 
@@ -21,4 +21,4 @@ Run:
 
 Test:
 
-         npm test
+        npm test
