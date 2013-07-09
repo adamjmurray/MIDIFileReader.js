@@ -199,27 +199,30 @@ class MIDIFileReader
     pitch = @stream.uInt8()
     velocity = @stream.uInt8()
     if velocity == 0 # treat like note off with no off velocity
-      return @_readNoteOff(pitch)
-    else if @notes[pitch]
-      console.log "Warning: ignoring overlapping note on for pitch #{pitch}" # TODO, support this case?
+      @_readNoteOff(pitch)
     else
-      @notes[pitch] = [velocity,@_currentTime()]
-    return # we'll create a "note" event when we see the corresponding note_off
+      if @notes[pitch]
+        console.log "Warning: ignoring overlapping note on for pitch #{pitch}" # TODO, support this case?
+      else
+        @notes[pitch] = [velocity,@_currentTime()]
+      null # we'll create a "note" event when we see the corresponding note_off
 
 
   _readNoteOff: (pitch) ->
     unless pitch # if passed in, this is the pitch of a 0 velocity note on message being treated as a note off
       pitch = @stream.uInt8()
       offVelocity = @stream.uInt8()
-    if not @notes[pitch]
+
+    if @notes[pitch]
+      [velocity,startTime] = @notes[pitch]
+      delete @notes[pitch]
+      event = {type:'note', pitch:pitch, velocity:velocity, duration:(@_currentTime() - startTime)}
+      event['off velocity'] = offVelocity if offVelocity
+      event.time = startTime
+      event
+    else
       console.log "Warning: ignoring note off event for pitch #{pitch} because there was no corresponding note on event"
-      return
-    [velocity,startTime] = @notes[pitch]
-    delete @notes[pitch]
-    event = {type:'note', pitch:pitch, velocity:velocity, duration:(@_currentTime() - startTime)}
-    event['off velocity'] = offVelocity if offVelocity
-    event.time = startTime
-    event
+      null
 
 
   # current track time, in beats (@timeOffset is in tickets, and @timeDiv is the ticks per beat)
