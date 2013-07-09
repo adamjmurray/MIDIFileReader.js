@@ -34,6 +34,18 @@ class NodeFileStream
 
   # get the next 8 bits as an unsigned integer
   uInt8: ->
-    data = @_buffer.readUInt8(@byteOffset)
-    @byteOffset += 1
+    if @nextByte
+      data = @nextByte
+      @nextByte = null
+    else
+      data = @_buffer.readUInt8(@byteOffset)
+      @byteOffset += 1
     data
+
+
+  # Set the next byte to be returned by uInt8
+  # Can be used for look-ahead purposes
+  feedByte: (byte) ->
+    @nextByte = byte
+    return
+

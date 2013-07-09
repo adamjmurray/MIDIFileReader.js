@@ -167,13 +167,13 @@ class MIDIFileReader
     return
 
 
-  _readChannelEvent: (eventChunkType, nextByte) ->
+  _readChannelEvent: (eventChunkType) ->
     typeMask = (eventChunkType & 0xF0)
     channel = (eventChunkType & 0x0F) + 1
 
     switch typeMask
       when NOTE_ON
-        pitch = nextByte || @stream.uInt8()
+        pitch = @stream.uInt8()
         velocity = @stream.uInt8()
         if velocity == 0 # treat like note off with no off velocity
           if not @notes[pitch]
@@ -192,7 +192,7 @@ class MIDIFileReader
           return # we'll create a "note" event when we see the corresponding note_off
 
       when NOTE_OFF
-        pitch = nextByte || @stream.uInt8()
+        pitch = @stream.uInt8()
         offVelocity = @stream.uInt8()
         if not @notes[pitch]
           console.log "Warning: ignoring note off event for pitch #{pitch} because there was no corresponding note on event"
@@ -203,14 +203,15 @@ class MIDIFileReader
         event['off velocity'] = offVelocity if offVelocity
         event.time = startTime
 
-      when NOTE_AFTERTOUCH then event = {type:'note aftertouch', pitch:(nextByte || @stream.uInt8()), value:@stream.uInt8()}
-      when CONTROLLER then event = {type:'controller', number:(nextByte || @stream.uInt8()), value:@stream.uInt8()}
-      when PROGRAM_CHANGE then event = {type:'program change', number:(nextByte || @stream.uInt8())}
-      when CHANNEL_AFTERTOUCH then event = {type:'channel aftertouch', value:(nextByte || @stream.uInt8())}
-      when PITCH_BEND then event = {type:'pitch bend', value:((nextByte || @stream.uInt8())<<7)+@stream.uInt8()}
+      when NOTE_AFTERTOUCH then event = {type:'note aftertouch', pitch:@stream.uInt8(), value:@stream.uInt8()}
+      when CONTROLLER then event = {type:'controller', number:@stream.uInt8(), value:@stream.uInt8()}
+      when PROGRAM_CHANGE then event = {type:'program change', number:@stream.uInt8()}
+      when CHANNEL_AFTERTOUCH then event = {type:'channel aftertouch', value:(@stream.uInt8())}
+      when PITCH_BEND then event = {type:'pitch bend', value:(@stream.uInt8()<<7)+@stream.uInt8()}
       else
         # "running status" event using same type and channel of previous event
-        @_readChannelEvent(@prevEventChunkType, eventChunkType)
+        @stream.feedByte(eventChunkType) # this will be returned by the next @stream.uInt8() call
+        @_readChannelEvent(@prevEventChunkType)
         return
 
     event.channel = channel
