@@ -168,7 +168,7 @@ class MIDIFileReader
 
   _readChannelEvent: (eventChunkType, nextByte) ->
     typeMask = (eventChunkType & 0xF0)
-    channel = (eventChunkType & 0x0F)
+    channel = (eventChunkType & 0x0F) + 1
 
     switch typeMask
       when NOTE_ON
@@ -181,6 +181,7 @@ class MIDIFileReader
           [velocity,startTime] = @notes[pitch]
           delete @notes[pitch]
           event = {type:'note', pitch:pitch, velocity:velocity, duration:(@_currentTime() - startTime)}
+          event.time = startTime
         else if @notes[pitch]
           console.log "Warning: ignoring overlapping note on for pitch #{pitch}" # TODO, support this case?
           return
@@ -199,6 +200,7 @@ class MIDIFileReader
         delete @notes[pitch]
         event = {type:'note', pitch:pitch, velocity:velocity, duration:(@_currentTime() - startTime)}
         event['off velocity'] = offVelocity if offVelocity
+        event.time = startTime
 
       when NOTE_AFTERTOUCH then event = {type:'note aftertouch', pitch:(nextByte || @stream.uInt8()), value:@stream.uInt8()}
       when CONTROLLER then event = {type:'controller', number:(nextByte || @stream.uInt8()), value:@stream.uInt8()}
@@ -211,7 +213,8 @@ class MIDIFileReader
         return
 
     event.channel = channel
-    event.time = @_currentTime()
+    event.time ?= @_currentTime()
+
     @events.push event
     @prevEventChunkType = eventChunkType
     return
