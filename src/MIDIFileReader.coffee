@@ -79,7 +79,7 @@ class MIDIFileReader
       throw "Invalid MIDI file: Missing track chunk ID on track number #{trackNumber}"
 
     track = {number: trackNumber}
-    events = []
+    events = {}
     @_notes = {}
     @_timeOffset = 0
     @_trackNumber = trackNumber # for more descriptive warning messages
@@ -104,8 +104,16 @@ class MIDIFileReader
         if event == END_OF_TRACK
           endOfTrack = true
         else
-          event.time ?= @_currentTime() # might have been set in _readNoteOff()
-          events.push event
+          if event.time? # set by _readNoteOff()
+            time = event.time
+            delete event.time
+          else
+            time = @_currentTime()
+
+          eventsForTime = events[time]
+          unless eventsForTime
+            eventsForTime = events[time] = []
+          eventsForTime.push event
 
     throw "Invalid MIDI file: Missing end of track event on track number #{trackNumber}" unless endOfTrack
     heldPitches = Object.keys(@_notes)
