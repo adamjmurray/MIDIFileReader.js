@@ -64,40 +64,35 @@ class MIDIFileReader
 
   read: (callback) ->
     @stream.open =>
-      @tracks = []
-      @_readHeader()
-      @_readTrack(trackNumber) for trackNumber in [1..@numTracks] by 1
-      # TODO: inspect @notes data structure and issue warnings if not empty (we missed some note offs)
+      throw 'Invalid MIDI file: Missing header chuck ID' unless @stream.uInt32BE() is HEADER_CHUNK_ID
+      throw 'Invalid MIDI file: Missing header chuck size' unless @stream.uInt32BE() is HEADER_CHUNK_SIZE
+      @formatType = @stream.uInt16BE()
+      @numTracks = @stream.uInt16BE()
+      @timeDiv = @stream.uInt16BE() # AKA ticks per beat
+      @tracks = ( @_readTrack(trackNumber) for trackNumber in [1..@numTracks] by 1 )
       callback() if callback
     return
 
 
-  _readHeader: ->
-    throw 'Invalid MIDI file: Missing header chuck ID' unless @stream.uInt32BE() is HEADER_CHUNK_ID
-    throw 'Invalid MIDI file: Missing header chuck size' unless @stream.uInt32BE() is HEADER_CHUNK_SIZE
-    @formatType = @stream.uInt16BE()
-    @numTracks = @stream.uInt16BE()
-    @timeDiv = @stream.uInt16BE() # AKA ticks per beat
-    return
-
-
   _readTrack: (trackNumber) ->
-    throw 'Invalid MIDI file: Missing track chunk ID' unless @stream.uInt32BE() is TRACK_CHUNK_ID
+    unless @stream.uInt32BE() is TRACK_CHUNK_ID
+      throw "Invalid MIDI file: Missing track chunk ID on track number #{trackNumber}"
 
-    @track = {number: trackNumber}
-    @track.events = @events = []
-    @notes = {}
-    @timeOffset = 0
+    track = {number: trackNumber}
+    events = []
+    @_notes = {}
+    @_timeOffset = 0
+    @_trackNumber = trackNumber # for more descriptive warning messages
 
     trackNumBytes = @stream.uInt32BE()
     endByte = @stream.byteOffset + trackNumBytes
-    @endOfTrack = false # Keeps track of whether we saw the meta event for end of track
+    endOfTrack = false # Keeps track of whether we saw the meta event for end of track
 
     while @stream.byteOffset < endByte
-      throw "Invalid MIDI file: End of track event occurred while track has more bytes" if @endOfTrack
+      throw "Invalid MIDI file: Early end of track event occurred on track number #{trackNumber}" if endOfTrack
 
       deltaTime = @_readVarLen() # in ticks
-      @timeOffset += deltaTime
+      @_timeOffset += deltaTime
 
       eventChunkType = @stream.uInt8()
       event = switch eventChunkType
@@ -106,18 +101,24 @@ class MIDIFileReader
         else @_readChannelEvent(eventChunkType)
 
       if event
-        event.time ?= @_currentTime() # might have been set in _readNoteOff()
-        @events.push event
+        if event == END_OF_TRACK
+          endOfTrack = true
+        else
+          event.time ?= @_currentTime() # might have been set in _readNoteOff()
+          events.push event
 
-    throw "Invalid MIDI file: Missing end of track event" unless @endOfTrack
-    @tracks.push @track
-    return
+    throw "Invalid MIDI file: Missing end of track event on track number #{trackNumber}" unless endOfTrack
+    heldPitches = Object.keys(@_notes)
+    if heldPitches.length > 0
+      console.log "Warning: ignoring hung notes on track number #{trackNumber} for pitches: #{heldPitches}"
+
+    track.events = events
+    track
 
 
   _readMetaEvent: ->
     type = @stream.uInt8()
-
-    event = switch type
+    switch type
       when SEQ_NUMBER then {type:'sequence number', number:@_readMetaValue()}
       when TEXT then {type:'text', text:@_readMetaText()}
       when COPYRIGHT then {type:'copyright', text:@_readMetaText()}
@@ -127,7 +128,7 @@ class MIDIFileReader
       when MARKER then {type:'marker', text:@_readMetaText()}
       when CUE_POINT then {type:'cue point', text:@_readMetaText()}
       when CHANNEL_PREFIX then {type:'channel prefix', channel:@_readMetaValue()}
-      when END_OF_TRACK then @_readMetaValue(); @endOfTrack = true; null # don't treat this as an explicit event
+      when END_OF_TRACK then @_readMetaData(); END_OF_TRACK # a pseudo-event, see how it's used in @_readTrack()
       when TEMPO then {type:'tempo', bpm:MICROSECONDS_PER_MINUTE/@_readMetaValue()} # value is microseconds per beat
       when SMPTE_OFFSET
         [firstByte, minute, second, frame, subframe] = @_readMetaData()
@@ -154,9 +155,8 @@ class MIDIFileReader
         {type:'key signature', key:key, scale:scale}
 
       when SEQ_SPECIFIC then {type:'sequencer specific', data:@_readMetaData()}
-      else console.log "Warning: ignoring unknown meta event type #{type.toString(16)}, with data #{@_readMetaData()}"
-
-    event
+      else console.log "Warning: ignoring unknown meta event on track number #{@_trackNumber} " +
+                       "type: #{type.toString(16)}, data: #{@_readMetaData()} "
 
 
   _readSysExEvent: (type) ->
@@ -188,7 +188,6 @@ class MIDIFileReader
     unless runningStatus
       event.channel = channel if event
       @prevEventChunkType = eventChunkType
-
     event
 
 
@@ -198,10 +197,11 @@ class MIDIFileReader
     if velocity == 0 # treat like note off with no off velocity
       @_readNoteOff(pitch)
     else
-      if @notes[pitch]
-        console.log "Warning: ignoring overlapping note on for pitch #{pitch}" # TODO, support this case?
+      if @_notes[pitch]
+        # TODO, support this case?
+        console.log "Warning: ignoring overlapping note on track number #{@_trackNumber} for pitch #{pitch}"
       else
-        @notes[pitch] = [velocity,@_currentTime()]
+        @_notes[pitch] = [velocity,@_currentTime()]
       null # we'll create a "note" event when we see the corresponding note_off
 
 
@@ -210,21 +210,21 @@ class MIDIFileReader
       pitch = @stream.uInt8()
       release = @stream.uInt8() # AKA "off velocity"
 
-    if @notes[pitch]
-      [velocity,startTime] = @notes[pitch]
-      delete @notes[pitch]
+    if @_notes[pitch]
+      [velocity,startTime] = @_notes[pitch]
+      delete @_notes[pitch]
       event = {type:'note', pitch:pitch, velocity:velocity, duration:(@_currentTime() - startTime)}
       event.release = release if release
       event.time = startTime
       event
     else
-      console.log "Warning: ignoring note off event for pitch #{pitch} because there was no corresponding note on event"
+      console.log "Warning: ignoring unmatched note off event on track #{@_trackNumber} for pitch #{pitch}"
       null
 
 
-  # current track time, in beats (@timeOffset is in tickets, and @timeDiv is the ticks per beat)
+  # current track time, in beats (@_timeOffset is in tickets, and @timeDiv is the ticks per beat)
   _currentTime: ->
-    @timeOffset/@timeDiv
+    @_timeOffset/@timeDiv
 
 
   # Read variable length numeric value in meta events
