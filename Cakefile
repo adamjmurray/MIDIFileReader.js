@@ -9,11 +9,9 @@ DIST_DIR = "#{BASE_DIR}/dist"
 
 src_for = (name) -> "#{SRC_DIR}/#{name}.coffee"
 
-BASE_SRC_FILES = (src_for name for name in [
-  'NodeFileStream'
-  'MIDIFileReader'
-])
-SRC_FILES = BASE_SRC_FILES.concat src_for('main')
+BASE_SRC_FILES = [src_for('MIDIFileReader')]
+NODE_SRC_FILES = BASE_SRC_FILES.concat [src_for('NodeFileStream'), src_for('main')]
+MAX_SRC_FILES  = BASE_SRC_FILES.concat [src_for('MaxFileStream'), src_for('MaxInterface')]
 OUT_FILE = "#{BUILD_DIR}/#{PROJECT}.js"
 
 COFFEE_ARGS = [
@@ -22,9 +20,9 @@ COFFEE_ARGS = [
   OUT_FILE
   '--compile'
   'license.txt'
-].concat SRC_FILES
+]
 
-TEST_FILES = BASE_SRC_FILES.concat(src_for 'exports')
+TEST_FILES = BASE_SRC_FILES.concat [src_for('NodeFileStream'), src_for('exports')]
 TEST_OUT_FILE = "#{TEST_DIR}/#{PROJECT}.js"
 
 child_process = require('child_process')
@@ -50,7 +48,11 @@ task 'clean', 'remove build artifacts', ->
 
 
 task 'build', 'build the app (debug version)', ->
-  exec "coffee #{COFFEE_ARGS.join(' ')}"
+  exec "coffee #{COFFEE_ARGS.concat(NODE_SRC_FILES).join(' ')}"
+
+
+task 'build-for-max', 'build the app for Max', ->
+  exec "coffee #{COFFEE_ARGS.concat(MAX_SRC_FILES).join(' ')}"
 
 
 task 'validate', 'validate syntax', ->
