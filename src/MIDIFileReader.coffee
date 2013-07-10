@@ -119,17 +119,17 @@ class MIDIFileReader
   _readMetaEvent: ->
     type = @stream.uInt8()
     switch type
-      when SEQ_NUMBER then {type:'sequence number', number:@_readMetaValue()}
-      when TEXT then {type:'text', text:@_readMetaText()}
-      when COPYRIGHT then {type:'copyright', text:@_readMetaText()}
-      when SEQ_NAME then {type:'sequence name', text:@_readMetaText()}
+      when SEQ_NUMBER      then {type:'sequence number', number:@_readMetaValue()}
+      when TEXT            then {type:'text', text:@_readMetaText()}
+      when COPYRIGHT       then {type:'copyright', text:@_readMetaText()}
+      when SEQ_NAME        then {type:'sequence name', text:@_readMetaText()}
       when INSTRUMENT_NAME then {type:'instrument name', text:@_readMetaText()}
-      when LYRICS then {type:'lyrics', text:@_readMetaText()}
-      when MARKER then {type:'marker', text:@_readMetaText()}
-      when CUE_POINT then {type:'cue point', text:@_readMetaText()}
-      when CHANNEL_PREFIX then {type:'channel prefix', channel:@_readMetaValue()}
-      when END_OF_TRACK then @_readMetaData(); END_OF_TRACK # a pseudo-event, see how it's used in @_readTrack()
-      when TEMPO then {type:'tempo', bpm:MICROSECONDS_PER_MINUTE/@_readMetaValue()} # value is microseconds per beat
+      when LYRICS          then {type:'lyrics', text:@_readMetaText()}
+      when MARKER          then {type:'marker', text:@_readMetaText()}
+      when CUE_POINT       then {type:'cue point', text:@_readMetaText()}
+      when CHANNEL_PREFIX  then {type:'channel prefix', channel:@_readMetaValue()}
+      when END_OF_TRACK    then @_readMetaData(); END_OF_TRACK # a pseudo-event, see how it's used in @_readTrack()
+      when TEMPO           then {type:'tempo', bpm:MICROSECONDS_PER_MINUTE/@_readMetaValue()} # value is microseconds per beat
       when SMPTE_OFFSET
         [firstByte, minute, second, frame, subframe] = @_readMetaData()
         framerate = switch (firstByte & 0x60) >> 5 # extract 2nd+3rd bits for frame rate info. In binary: & 01100000
@@ -172,13 +172,13 @@ class MIDIFileReader
     channel = (eventChunkType & 0x0F) + 1
 
     event = switch typeMask
-      when NOTE_ON then @_readNoteOn()
-      when NOTE_OFF then @_readNoteOff()
-      when NOTE_AFTERTOUCH then {type:'note aftertouch', pitch:@stream.uInt8(), value:@stream.uInt8()}
-      when CONTROLLER then {type:'controller', number:@stream.uInt8(), value:@stream.uInt8()}
-      when PROGRAM_CHANGE then {type:'program change', number:@stream.uInt8()}
+      when NOTE_ON            then @_readNoteOn()
+      when NOTE_OFF           then @_readNoteOff()
+      when NOTE_AFTERTOUCH    then {type:'note aftertouch', pitch:@stream.uInt8(), value:@stream.uInt8()}
+      when CONTROLLER         then {type:'controller', number:@stream.uInt8(), value:@stream.uInt8()}
+      when PROGRAM_CHANGE     then {type:'program change', number:@stream.uInt8()}
       when CHANNEL_AFTERTOUCH then {type:'channel aftertouch', value:(@stream.uInt8())}
-      when PITCH_BEND then {type:'pitch bend', value:(@stream.uInt8()<<7)+@stream.uInt8()}
+      when PITCH_BEND         then {type:'pitch bend', value:(@stream.uInt8()<<7)+@stream.uInt8()}
       else
         # "running status" event using same type and channel of previous event
         runningStatus = true
