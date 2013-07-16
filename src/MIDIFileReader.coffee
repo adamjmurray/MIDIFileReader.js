@@ -78,8 +78,7 @@ class MIDIFileReader
     unless @stream.uInt32BE() is TRACK_CHUNK_ID
       throw "Invalid MIDI file: Missing track chunk ID on track number #{trackNumber}"
 
-    track = {number: trackNumber}
-    events = {}
+    track = {}
     @_notes = {}
     @_timeOffset = 0
     @_trackNumber = trackNumber # for more descriptive warning messages
@@ -109,18 +108,13 @@ class MIDIFileReader
             delete event.time
           else
             time = @_currentTime()
-
-          eventsForTime = events[time]
-          unless eventsForTime
-            eventsForTime = events[time] = []
-          eventsForTime.push event
+          eventsAtTime = (track[time] ?= [])
+          eventsAtTime.push event
 
     throw "Invalid MIDI file: Missing end of track event on track number #{trackNumber}" unless endOfTrack
     heldPitches = Object.keys(@_notes)
     if heldPitches.length > 0
       console.log "Warning: ignoring hung notes on track number #{trackNumber} for pitches: #{heldPitches}"
-
-    track.events = events
     track
 
 

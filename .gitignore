@@ -3,4 +3,5 @@ dist
 *.log
 node_modules
 test/*.js
+maxmsp/*.js
 /*.mid

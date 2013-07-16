@@ -6,6 +6,7 @@ BUILD_DIR = "#{BASE_DIR}/build"
 SRC_DIR = "#{BASE_DIR}/src"
 TEST_DIR = "#{BASE_DIR}/test"
 DIST_DIR = "#{BASE_DIR}/dist"
+MAXMSP_DIR = "#{BASE_DIR}/maxmsp"
 
 src_for = (name) -> "#{SRC_DIR}/#{name}.coffee"
 
@@ -37,6 +38,10 @@ exec = (cmd, callback) ->
     console.log 'Success'.green
     callback() if callback
 
+compile = (srcFiles, outFile) ->
+  srcs = ("\"#{src}\"" for src in srcFiles).join(' ')
+  exec "coffee --join \"#{outFile}\" --bare --compile license.txt #{srcs}"
+
 
 task 'clean', 'remove build artifacts', ->
   exec "rm -rf #{OUT_FILE} #{DIST_DIR}"
@@ -48,11 +53,11 @@ task 'clean', 'remove build artifacts', ->
 
 
 task 'build', 'build the app (debug version)', ->
-  exec "coffee #{COFFEE_ARGS.concat(NODE_SRC_FILES).join(' ')}"
+  compile NODE_SRC_FILES, OUT_FILE
 
 
 task 'build-for-max', 'build the app for Max', ->
-  exec "coffee #{COFFEE_ARGS.concat(MAX_SRC_FILES).join(' ')}"
+  compile MAX_SRC_FILES, "#{MAXMSP_DIR}/#{PROJECT}.js"
 
 
 task 'validate', 'validate syntax', ->
