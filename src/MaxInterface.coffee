@@ -4,7 +4,6 @@
   error: (msg...) -> error(msg+"\n")
 
 TICKS_PER_BEAT = 480
-_ = '' # no-op value
 
 dictName = jsarguments[1]
 if dictName
@@ -16,7 +15,7 @@ else
 read = (filepath) ->
   midi = new MIDIFileReader(new MaxFileStream(filepath))
   midi.read ->
-    #console.log JSON.stringify(midi.tracks, null, 2)
+    # console.log JSON.stringify(midi.tracks, null, 2)
     if dict
       dict.clear()
       for track,index in midi.tracks
@@ -27,14 +26,15 @@ read = (filepath) ->
         for time,events of track
           data = []
           for e in events
-            switch e.type
-              when 'note'               then data.push 'note', e.pitch, e.velocity, e.duration*TICKS_PER_BEAT
-              when 'controller'         then data.push 'cc', e.number, e.value, _
-              when 'channel aftertouch' then data.push 'aftertouch', e.value, _, _
-              when 'pitch bend'         then data.push 'pitchbend', e.value, _, _
+            switch e.type               # Store events in 3 value chunks (no event type prefix implies a note event)
+              when 'note'               then data.push e.pitch, e.velocity, e.duration*TICKS_PER_BEAT
+              when 'controller'         then data.push 'cc', e.number, e.value
+              when 'channel aftertouch' then data.push 'at', e.value, 0
+              when 'pitch bend'         then data.push 'pb', e.value, 0
 
           # TODO: optional quantization?
-          timeline.set(time*TICKS_PER_BEAT, data) if data.length > 0
+          # TODO: with rounding we may overwrite existing data...
+          timeline.set(Math.round(time*TICKS_PER_BEAT), data) if data.length > 0
 
         dict.set(trackName, timeline)
 
